@@ -1,0 +1,28 @@
+#!/usr/bin/perl -w
+
+use strict;
+use FindBin;
+use lib "$FindBin::Bin/../perllib";
+
+use Games::Checkers::Iterators;
+use Games::Checkers::LocationConversions;
+
+sub dumpLocation ($) {
+	my $loc = shift;
+	return sprintf("%02d (%s)", $loc, locationToStr($loc));
+}
+
+print "All board locations:\n";
+my $iterator = Games::Checkers::LocationIterator->new;
+my @locations = $iterator->all;
+print "\t", dumpLocation($_), "\n" foreach @locations;
+
+
+my $loc = 22;
+foreach (qw(PawnStepIterator PawnBeatIterator KingStepIterator KingBeatIterator)) {
+	print "\nAll $_ candidate locations from ", dumpLocation($loc), ":\n";
+	my $class = "Games::Checkers::$_";
+	my $iterator = $class->new($loc, 0);
+	my @locations = $iterator->all;
+	print "\t", dumpLocation($_), "\n" foreach @locations;
+}

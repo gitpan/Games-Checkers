@@ -1,0 +1,11 @@
+#!/usr/bin/perl -w
+
+use strict;
+use FindBin;
+use lib "$FindBin::Bin/../perllib";
+
+use Games::Checkers::Board;
+
+my $board = Games::Checkers::Board->new;
+
+print $board->dump;

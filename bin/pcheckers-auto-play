@@ -1,0 +1,80 @@
+#!/usr/bin/perl -w
+
+# Usage: auto-play --help
+
+use strict;
+use FindBin;
+use lib "$FindBin::Bin/../perllib";
+use Getopt::Long;
+
+use Games::Checkers::Board;
+use Games::Checkers::Constants;
+use Games::Checkers::BoardTree;
+
+my $scriptName = ($0 =~ m:([^/]+)$:, $1);
+my $level = 2;
+my $pause = 1;
+my $random = 0;
+my $maxMoveNum = 100;
+
+sub showHelp {
+	my $text = qq{
+		The automatical Checkers gameplay.
+		Usage: $scriptName [OPTIONS]
+		Options:
+			--help             show this help and exit
+			--level N          thinking level
+			--pause N          pause in seconds between the moves
+			--random           perform random moves, not best moves
+			--dumb-term        do not position terminal cursor
+			--dumb-chars       do not use fancy drawing characters
+			--move-num N       limit the game moves to the number
+			--give-away        change rules to "give away"
+	};
+	$text =~ s/^\n//; $text =~ s/\t$//; $text =~ s/^\t\t//mg;
+	print $text;
+	exit 0;
+}
+
+sub wrongUsage {
+	print STDERR "Try '$scriptName --help' for more information.\n";
+	exit -1;
+}
+
+GetOptions(
+	"help|h"       => \&showHelp,   
+	"level|l=s"    => \$level,
+	"pause|p=s"    => \$pause,
+	"random|r!"    => \$random,
+	"dumb-term!"   => \$ENV{DUMB_TERM},
+	"dumb-chars!"  => \$ENV{DUMB_CHARS},
+	"move-num|m=s" => \$maxMoveNum,
+	"give-away|g!" => \$Games::Checkers::giveAway,
+) || wrongUsage();
+
+my $board = Games::Checkers::Board->new;
+
+print "\e[1;1H\e[J" unless $ENV{DUMB_TERM};
+print $board->dump;
+
+my $color = White;
+
+my $numMoves = 0;
+while ($board->canColorMove($color)) {
+	sleep($pause);
+	if ($numMoves++ == $maxMoveNum * 2) {
+		print "Maximal number of moves reached ($maxMoveNum). Automatical draw.\n";
+		exit;
+	}
+	my $boardTree = Games::Checkers::BoardTree->new($board, $color, $level);
+	my $move = $random? $boardTree->chooseRandomMove: $boardTree->chooseBestMove;
+	$board->transform($move);
+	printf "  %02d. %s", (1 + $numMoves) / 2, $color == White? "": "... ";
+	print $move->dump, "                           \n";
+	print "\e[1;1H" unless $ENV{DUMB_TERM};
+	print $board->dump;
+
+	$color = $color == White? Black: White;
+}
+
+print "\n", ["Black", "White"]->[$color == White? 0: 1], " won. \n";

@@ -1,0 +1,107 @@
+#!/usr/bin/perl -w
+
+# Usage: replay-games --help
+
+use strict;
+use FindBin;
+use lib "$FindBin::Bin/../perllib";
+use Getopt::Long;
+
+use Games::Checkers::Board;
+use Games::Checkers::Constants;
+use Games::Checkers::MoveConstants;
+use Games::Checkers::PDNParser;
+use Games::Checkers::CreateMoveList;
+
+my $scriptName = ($0 =~ m:([^/]+)$:, $1);
+my $pause = 1;
+my $break = 10;
+my $gameStart = 1;
+
+sub showHelp {
+	my $text = qq{
+		The automatical replay of recorded Checkers games from PDN file.
+		Usage: $scriptName [OPTIONS] file.pdn
+		Options:
+			--help             show this help and exit
+			--pause N          pause in seconds between the moves
+			--break N          pause in seconds between the games
+			--start N          skip N-1 games, start with N's game
+			--dumb-term        do not position terminal cursor
+			--dumb-chars       do not use fancy drawing characters
+	};
+	$text =~ s/^\n//; $text =~ s/\t$//; $text =~ s/^\t\t//mg;
+	print $text;
+	exit 0;
+}
+
+sub wrongUsage {
+	print STDERR "Try '$scriptName --help' for more information.\n";
+	exit -1;
+}
+
+GetOptions(
+	"help|h"       => \&showHelp,   
+	"pause|p=i"    => \$pause,
+	"break|b=i"    => \$break,
+	"start|s=i"    => \$gameStart,
+	"dumb-term!"   => \$ENV{DUMB_TERM},
+	"dumb-chars!"  => \$ENV{DUMB_CHARS},
+) || wrongUsage();
+
+my %resultString = (
+	'1-0' => "Black resigned",
+	'0-1' => "White resigned",
+	'1/2-1/2' => "Draw is agreed",
+);
+
+my $defaultDir = "$FindBin::Bin/../data/games/default";
+my $file = shift;
+$file = "$defaultDir/default.pdn" if !$file && -t;
+$file ||= "-" unless -t;
+showHelp() unless $file;
+$file = "$defaultDir/$file" unless $file =~ /^[\.\/-]/ || -f $file;
+
+my $pdnParser = Games::Checkers::PDNParser->new($file);
+
+my $gameCount = 0;
+while (my $pdnRecord = $pdnParser->nextRecord) {
+	$gameCount++;
+	next if $gameCount < $gameStart;
+	my ($moveVergeTrios, $values) = @$pdnRecord;
+
+	my $board = Games::Checkers::Board->new;
+
+	print "\e[1;1H\e[J" unless $ENV{DUMB_TERM};
+	print $board->dump;
+
+	my $color = White;
+
+	my $moveCount = 0;
+	while (@$moveVergeTrios) {
+		sleep($pause);
+		$moveCount++;
+		my $moveToShow = (1 + $moveCount) / 2;
+
+		my $moveVergeTrio = shift @$moveVergeTrios;
+		my ($isBeat, $src, $dst) = @$moveVergeTrio;
+		my $creatingMove = Games::Checkers::CreateVergeMove->new(
+			$board, $color, $isBeat, $src, $dst);
+		die "Internal problem" unless $creatingMove->status == Ok;
+		my $move = $creatingMove->getMove;
+		die "Corrupt game #$gameCount record? Move #$moveToShow ($src, $dst) can't be created\n"
+			if $move == NO_MOVE;
+
+		$board->transform($move);
+		printf "  %02d. %s", $moveToShow, $color == White? "": "... ";
+		print $move->dump, "                           \n";
+		print "\e[1;1H" unless $ENV{DUMB_TERM};
+		print $board->dump;
+
+		$color = $color == White? Black: White;
+	}
+
+	my $result = $values->{Result} || "";
+	print "\n", $resultString{$result} || "Unknown result ($result)", "\n";
+	sleep($break);
+}
